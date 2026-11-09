@@ -76,6 +76,29 @@ func (r *UserRepository) GetByID(ctx context.Context, id int64) (model.User, err
 	return u, nil
 }
 
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (model.User, error) {
+	query := r.builder.Select("id", "email", "nickname", "password_hash", "created_at").
+		From("users").
+		Where(sq.Eq{"email": email})
+
+	sqlStr, args, err := query.ToSql()
+	if err != nil {
+		return model.User{}, fmt.Errorf("build query: %w", err)
+	}
+
+	var u model.User
+	err = r.db.QueryRowContext(ctx, sqlStr, args...).Scan(&u.ID, &u.Email, &u.Nickname, &u.PasswordHash, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return model.User{}, apperror.ErrUserNotFound
+		}
+
+		return model.User{}, fmt.Errorf("failed to select user by email: %w", err)
+	}
+
+	return u, nil
+}
+
 func (r *UserRepository) Delete(ctx context.Context, id int64) error {
 	query := r.builder.Delete("users").
 		Where(sq.Eq{"id": id})
@@ -103,6 +126,14 @@ func (r *UserRepository) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *UserRepository) Update(ctx context.Context, id int64, update model.UserUpdate) error {
+	return r.update(ctx, r.db, id, update)
+}
+
+func (r *UserRepository) UpdateTx(ctx context.Context, tx *sql.Tx, id int64, update model.UserUpdate) error {
+	return r.update(ctx, tx, id, update)
+}
+
+func (r *UserRepository) update(ctx context.Context, executor sqlExecer, id int64, update model.UserUpdate) error {
 	if update.Email == nil && update.Nickname == nil && update.PasswordHash == nil {
 		return apperror.ErrNoFieldsToUpdate
 	}
@@ -123,7 +154,7 @@ func (r *UserRepository) Update(ctx context.Context, id int64, update model.User
 		return fmt.Errorf("build query: %w", err)
 	}
 
-	result, err := r.db.ExecContext(ctx, sqlStr, args...)
+	result, err := executor.ExecContext(ctx, sqlStr, args...)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {

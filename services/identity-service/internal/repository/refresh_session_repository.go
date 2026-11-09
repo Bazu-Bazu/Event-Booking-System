@@ -191,3 +191,30 @@ func (r *RefreshSessionRepository) Revoke(ctx context.Context, tokenHash string)
 
 	return nil
 }
+
+func (r *RefreshSessionRepository) RevokeAll(ctx context.Context, userID int64) error {
+	return r.revokeAll(ctx, r.db, userID)
+}
+
+func (r *RefreshSessionRepository) RevokeAllTx(ctx context.Context, tx *sql.Tx, userID int64) error {
+	return r.revokeAll(ctx, tx, userID)
+}
+
+func (r *RefreshSessionRepository) revokeAll(ctx context.Context, executor sqlExecer, userID int64) error {
+	query := r.builder.
+		Update("refresh_sessions").
+		Set("revoked_at", sq.Expr("NOW()")).
+		Where(sq.Eq{"user_id": userID}).
+		Where(sq.Eq{"revoked_at": nil})
+
+	sqlStr, args, err := query.ToSql()
+	if err != nil {
+		return fmt.Errorf("build query: %w", err)
+	}
+
+	if _, err := executor.ExecContext(ctx, sqlStr, args...); err != nil {
+		return fmt.Errorf("revoke all sessions for user: %w", err)
+	}
+
+	return nil
+}
