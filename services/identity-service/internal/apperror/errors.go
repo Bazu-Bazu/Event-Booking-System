@@ -11,4 +11,5 @@ var (
 	ErrInvalidEmail        = errors.New("invalid email")
 	ErrInvalidNickname     = errors.New("invalid nickname")
 	ErrInvalidPassword     = errors.New("invalid password")
+	ErrInvalidCredentials  = errors.New("invalid credentials")
 )
